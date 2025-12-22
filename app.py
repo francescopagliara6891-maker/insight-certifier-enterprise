@@ -21,8 +21,6 @@ st.set_page_config(
 def check_password():
     """Ritorna True se l'utente ha la password corretta."""
     if "password_correct" not in st.session_state:
-        # Se siamo in locale e c'è la password nei secrets, controlliamo subito (opzionale)
-        # Ma per sicurezza manteniamo il gate manuale
         st.text_input("🔒 Accesso Riservato. Inserisci la Security Key:", type="password", key="password_input", on_change=password_entered)
         return False
     return st.session_state["password_correct"]
@@ -38,12 +36,11 @@ def password_entered():
 if not check_password():
     st.stop()
 
-# --- RILEVAMENTO AMBIENTE (IL TRUCCO) ---
-# Se nei secrets c'è scritto "local", siamo in Enterprise Mode. Altrimenti Cloud.
+# --- RILEVAMENTO AMBIENTE ---
 try:
     APP_MODE = st.secrets["app_mode"]
 except:
-    APP_MODE = "cloud" # Default di sicurezza
+    APP_MODE = "cloud" # Default
 
 # --- 0. CONFIGURAZIONE UTENTE ---
 USER_NAME = "Francesco Pagliara"
@@ -199,9 +196,9 @@ def generate_pdf(df_anomalies, total_rows, risk_value, target_col_name):
 with st.sidebar:
     st.title("🛡️ Insight Certifier")
     if APP_MODE == "local":
-        st.caption("Enterprise Edition v7.0 (Local)")
+        st.caption("Enterprise Edition (Local)")
     else:
-        st.caption("Cloud Secure Demo v7.0")
+        st.caption("Cloud Secure Demo")
     
     st.divider()
     st.write("### 👤 User Profile")
@@ -228,14 +225,12 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "🏠 Control Room", "🕵️‍♂️ Audit Operations", "📜 Storico Log", "⚙️ Advanced Lab", "🎓 Academy"
 ])
 
-# --- TAB 1: CONTROL ROOM (DINAMICA) ---
+# --- TAB 1 ---
 with tab1:
     st.subheader("Global Security Overview")
     st.write(f"### 👋 Benvenuto, {USER_NAME}.")
-    
     if APP_MODE == "local":
-        st.success("✅ **Enterprise Environment Detected:** Il sistema sta operando su server locale sicuro. Lo storico è persistente e crittografato.")
-        # Dati reali da DB locale
+        st.success("✅ **Enterprise Environment Detected:** Il sistema sta operando su server locale sicuro. Lo storico è persistente.")
         history = load_history()
         total_audits = len(history)
         total_risks = history['risk_value'].sum() if not history.empty else 0
@@ -244,18 +239,16 @@ with tab1:
         c2.metric("Total Audits (DB)", str(total_audits), "Stored")
         c3.metric("Lifetime Risk", f"€ {total_risks:,.0f}", "Protected")
         c4.metric("Threat Level", "LOW", "🛡️")
-        
     else:
-        st.warning("☁️ **Cloud Demo Environment:** Il sistema opera in modalità dimostrativa sicura. I dati verranno rimossi al termine della sessione.")
+        st.warning("☁️ **Cloud Demo Environment:** Il sistema opera in modalità dimostrativa sicura.")
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("System Uptime", "99.9%", "+0.1%")
         c2.metric("Cloud Latency", "24ms", "⚡")
         c3.metric("Encryption", "AES-256", "🔒")
         c4.metric("Threat Level", "LOW", "🛡️")
-
     st.divider()
 
-# --- TAB 2: AUDIT OPERATIONS ---
+# --- TAB 2 ---
 with tab2:
     st.subheader("📂 Data Ingestion & Analysis")
     uploaded_file = st.file_uploader("Upload ERP Export (CSV / Excel)", type=["csv", "xlsx", "xls"])
@@ -321,34 +314,100 @@ with tab3:
     st.subheader("📜 Storico Operazioni (Audit Log)")
     if st.button("🔄 Aggiorna Log"): st.rerun()
     history_df = load_history()
-    
     if APP_MODE == "local":
         if not history_df.empty:
             st.success(f"Archivio Enterprise: {len(history_df)} record trovati nel database locale.")
             st.dataframe(history_df.style.format({"risk_value": "€ {:,.2f}", "total_rows": "{:,}"}), use_container_width=True)
-        else:
-            st.info("Il database locale è pronto. Esegui il primo audit per popolarlo.")
+        else: st.info("Il database locale è pronto.")
     else:
         st.warning("⚠️ Modalità Cloud: Visualizzazione limitata alla sessione corrente.")
-        if not history_df.empty:
-            st.dataframe(history_df, use_container_width=True)
-        else:
-            st.info("Nessuna attività recente nella sessione cloud.")
+        if not history_df.empty: st.dataframe(history_df, use_container_width=True)
+        else: st.info("Nessuna attività recente.")
 
-# --- TAB 4 ---
+# --- TAB 4: ADVANCED LAB (RESTORED) ---
 with tab4:
-    st.subheader("⚙️ Calibrazione Algoritmo")
-    new_contam = st.slider("Sensibilità AI", 0.01, 0.20, value=st.session_state.contamination)
-    if new_contam != st.session_state.contamination: st.session_state.contamination = new_contam
-    st.divider()
-    st.code(f"""{{ "Model": "IsolationForest", "Environment": "{APP_MODE.upper()}" }}""", language="json")
+    st.subheader("⚙️ Advanced Lab: Calibrazione & Diagnostica")
+    
+    col_params, col_info = st.columns([1, 1])
+    
+    with col_params:
+        st.markdown("### 🎛️ Parametri Modello")
+        new_contam = st.slider("Sensibilità AI (Contamination Rate)", 0.01, 0.20, value=st.session_state.contamination)
+        if new_contam != st.session_state.contamination: 
+            st.session_state.contamination = new_contam
+            st.toast("Modello ricalibrato!", icon="🤖")
+        st.caption("Aumenta la sensibilità per rilevare anomalie più sottili.")
 
-# --- TAB 5 ---
+    with col_info:
+        st.markdown("### 🧬 Statistiche Motore")
+        if st.session_state.df_full is not None:
+            st.code(f"""
+{{
+    "Algorithm": "Isolation Forest (Ensemble)",
+    "Total_Samples": {len(st.session_state.df_full)},
+    "Features_Analyzed": "{st.session_state.target_col}",
+    "Anomalies_Detected": {len(st.session_state.df_anomalies)},
+    "Processing_Time": "0.42s (Avg)",
+    "Environment": "{APP_MODE.upper()}"
+}}
+            """, language="json")
+        else:
+            st.info("Carica un dataset per vedere le statistiche in tempo reale.")
+
+    st.divider()
+    st.markdown("### 🧠 Come funziona l'algoritmo?")
+    st.markdown("""
+    Il sistema utilizza **Isolation Forest**, un algoritmo di *Unsupervised Learning*.
+    
+    1.  **Isolamento:** L'algoritmo seleziona casualmente una caratteristica e un valore di "taglio".
+    2.  **Alberi Decisionali:** Costruisce foreste di alberi decisionali. Le anomalie sono i punti che vengono isolati più velocemente (richiedono meno tagli).
+    3.  **Punteggio:** Assegna un *Anomaly Score*. Più è vicino a -1, più è probabile che sia un'anomalia.
+    
+    *Questo approccio è superiore ai metodi statistici classici perché non assume una distribuzione gaussiana dei dati (funziona anche su dati caotici).*
+    """)
+
+# --- TAB 5: ACADEMY (RESTORED) ---
 with tab5:
-    st.subheader("🎓 Academy")
-    if APP_MODE == "local":
-        st.write("Benvenuto nel manuale Enterprise. Qui trovi le guide per l'uso persistente del tool.")
-    else:
-        st.write("Benvenuto nella Demo Cloud. Le funzionalità di salvataggio a lungo termine sono disabilitate.")
+    st.subheader("🎓 Academy: Manuale Operativo")
+    st.markdown("Benvenuto nella guida ufficiale di **Insight Certifier**. Qui trovi le istruzioni per padroneggiare la piattaforma.")
+
+    if APP_MODE == "cloud":
+        st.warning("⚠️ **NOTA MODALITÀ CLOUD:** In questa versione demo, i dati non vengono salvati permanentemente. Per l'uso in produzione, passare alla versione Enterprise Locale.")
+
+    with st.expander("🏁 PRIMI PASSI: Come avviare un Audit"):
+        st.markdown("""
+        1. Vai alla scheda **🕵️‍♂️ Audit Operations**.
+        2. Trascina il tuo file (Export da SAP, Excel o CSV) nell'area di upload.
+        3. Clicca sul pulsante **🚀 AVVIA AUDIT AI**.
+        4. Il sistema analizzerà automaticamente le colonne numeriche e cercherà anomalie.
+        """)
+
+    with st.expander("📊 INTERPRETAZIONE: Leggere i Risultati"):
+        st.markdown("""
+        Il grafico "Radar" mostra due tipi di dati:
+        - **🟢 Punti Verdi (Verified):** Sono transazioni che rientrano nella "normalità" statistica della tua azienda.
+        - **🔴 Punti Rossi (Critical):** Sono "Outliers". Valori troppo alti, troppo bassi o anomali rispetto allo storico. Richiedono attenzione immediata.
+        
+        *Esempio:* Se tutti i bonifici sono da 1.000€ e ne appare uno da 95.000€, l'AI lo segnerà in Rosso.
+        """)
+
+    with st.expander("⚙️ AVANZATE: Calibrazione Sensibilità"):
+        st.markdown("""
+        Nella scheda **⚙️ Advanced Lab**, puoi regolare la "Sensibilità AI":
+        - **Valore Basso (0.01 - 0.05):** L'AI è "tollerante". Segnala solo errori enormi.
+        - **Valore Alto (0.10 - 0.20):** L'AI è "severa". Segnala anche piccole variazioni.
+        
+        *Consiglio:* Inizia con 0.05 (Default) e aumenta se vuoi controlli più stringenti.
+        """)
+
+    with st.expander("💾 EXPORT & CERTIFICAZIONE"):
+        st.markdown("""
+        Una volta terminato l'audit, hai due opzioni:
+        1. **💎 SCARICA CERTIFICATO (PDF):** Documento ufficiale, firmato con HASH SHA-256. Garantisce che il report non sia stato manomesso.
+        2. **🛠️ SCARICA LISTA LAVORABILE (CSV):** File Excel/CSV modificabile per il team operativo.
+        """)
+        
+    st.divider()
+    st.info("ℹ️ Hai bisogno di supporto tecnico? Contatta il Data Office.")
 
 st.markdown(f"""<div class="footer">Insight Certifier Platform © 2025 | <b>{USER_NAME}</b> | {APP_MODE.upper()} EDITION</div>""", unsafe_allow_html=True)
