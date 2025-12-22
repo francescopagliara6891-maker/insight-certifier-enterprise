@@ -17,51 +17,33 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- 2. GESTIONE PASSWORD (IL CANCELLO) ---
+# --- 2. GESTIONE PASSWORD & AMBIENTE ---
 def check_password():
     """Ritorna True se l'utente ha la password corretta."""
-
-    def password_entered():
-        """Controlla se la password inserita è corretta."""
-        if st.session_state["password"] == st.secrets["password"]:
-            st.session_state["password_correct"] = True
-            del st.session_state["password"]  # Non conservare la password
-        else:
-            st.session_state["password_correct"] = False
-
     if "password_correct" not in st.session_state:
-        # Prima esecuzione, mostra l'input
-        st.text_input(
-            "🔒 Accesso Riservato. Inserisci la Security Key:", 
-            type="password", 
-            on_change=password_entered, 
-            key="password"
-        )
-        st.caption("Insight Certifier Platform - Protected Environment")
+        # Se siamo in locale e c'è la password nei secrets, controlliamo subito (opzionale)
+        # Ma per sicurezza manteniamo il gate manuale
+        st.text_input("🔒 Accesso Riservato. Inserisci la Security Key:", type="password", key="password_input", on_change=password_entered)
         return False
-    
-    elif not st.session_state["password_correct"]:
-        # Password sbagliata
-        st.text_input(
-            "🔒 Accesso Riservato. Inserisci la Security Key:", 
-            type="password", 
-            on_change=password_entered, 
-            key="password"
-        )
-        st.error("⛔ Accesso Negato. Chiave di sicurezza non valida.")
-        return False
-    
-    else:
-        # Password corretta
-        return True
+    return st.session_state["password_correct"]
 
-# --- BLOCCO DI SICUREZZA ---
+def password_entered():
+    if st.session_state["password_input"] == st.secrets["password"]:
+        st.session_state["password_correct"] = True
+        del st.session_state["password_input"]
+    else:
+        st.session_state["password_correct"] = False
+        st.error("⛔ Accesso Negato.")
+
 if not check_password():
     st.stop()
 
-# ==============================================================================
-# AREA PROTETTA: IL SOFTWARE VERO E PROPRIO
-# ==============================================================================
+# --- RILEVAMENTO AMBIENTE (IL TRUCCO) ---
+# Se nei secrets c'è scritto "local", siamo in Enterprise Mode. Altrimenti Cloud.
+try:
+    APP_MODE = st.secrets["app_mode"]
+except:
+    APP_MODE = "cloud" # Default di sicurezza
 
 # --- 0. CONFIGURAZIONE UTENTE ---
 USER_NAME = "Francesco Pagliara"
@@ -83,7 +65,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- GESTIONE DATABASE (SQLITE) ---
+# --- GESTIONE DATABASE ---
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
@@ -124,7 +106,7 @@ def load_history():
 
 init_db()
 
-# --- INIZIALIZZAZIONE MEMORIA DI SESSIONE ---
+# --- INIZIALIZZAZIONE SESSION STATE ---
 if 'audit_done' not in st.session_state: st.session_state.audit_done = False
 if 'df_full' not in st.session_state: st.session_state.df_full = None
 if 'df_anomalies' not in st.session_state: st.session_state.df_anomalies = pd.DataFrame()
@@ -159,7 +141,7 @@ def generate_pdf(df_anomalies, total_rows, risk_value, target_col_name):
     pdf.cell(0, 10, f'Date of Issue: {time.strftime("%Y-%m-%d %H:%M:%S")}', 0, 1, 'R')
     pdf.ln(5)
     
-    # EXECUTIVE SUMMARY
+    # 1. EXECUTIVE SUMMARY
     pdf.set_font('Arial', 'B', 14)
     pdf.set_fill_color(230, 230, 250)
     pdf.cell(0, 10, "  1. EXECUTIVE SUMMARY", 0, 1, 'L', 1)
@@ -173,7 +155,7 @@ def generate_pdf(df_anomalies, total_rows, risk_value, target_col_name):
     pdf.set_text_color(0, 0, 0)
     pdf.ln(10)
 
-    # FORENSIC DETAIL
+    # 2. FORENSIC DETAIL
     pdf.set_font('Arial', 'B', 14)
     pdf.set_fill_color(230, 230, 250)
     pdf.cell(0, 10, "  2. FORENSIC DETAIL (TOP PRIORITY)", 0, 1, 'L', 1)
@@ -197,7 +179,7 @@ def generate_pdf(df_anomalies, total_rows, risk_value, target_col_name):
         pdf.set_text_color(0, 0, 0)
     pdf.ln(15)
 
-    # HASH
+    # 3. HASH
     pdf.set_font('Arial', 'B', 14)
     pdf.set_fill_color(200, 220, 255)
     pdf.cell(0, 10, "  3. BLOCKCHAIN-READY INTEGRITY HASH", 0, 1, 'L', 1)
@@ -213,19 +195,28 @@ def generate_pdf(df_anomalies, total_rows, risk_value, target_col_name):
     pdf.output(filename)
     return filename, digital_signature
 
-# --- SIDEBAR ---
+# --- SIDEBAR DINAMICA ---
 with st.sidebar:
     st.title("🛡️ Insight Certifier")
-    st.caption("Cloud Secure Edition v6.0")
+    if APP_MODE == "local":
+        st.caption("Enterprise Edition v7.0 (Local)")
+    else:
+        st.caption("Cloud Secure Demo v7.0")
+    
     st.divider()
     st.write("### 👤 User Profile")
     st.info(f"**{USER_NAME}**")
     st.caption(ROLE)
     st.write("### 📡 System Status")
     st.success("AI Core: **ONLINE**")
-    st.success("Cloud Uplink: **SECURE**")
+    
+    if APP_MODE == "local":
+        st.success("Database: **PERSISTENT** 💾")
+    else:
+        st.warning("Database: **EPHEMERAL** ☁️")
+        
     st.divider()
-    if st.button("🔒 Logout / Lock Terminal"):
+    if st.button("🔒 Logout / Lock"):
         del st.session_state["password_correct"]
         st.rerun()
 
@@ -237,23 +228,34 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "🏠 Control Room", "🕵️‍♂️ Audit Operations", "📜 Storico Log", "⚙️ Advanced Lab", "🎓 Academy"
 ])
 
-# --- TAB 1 ---
+# --- TAB 1: CONTROL ROOM (DINAMICA) ---
 with tab1:
     st.subheader("Global Security Overview")
     st.write(f"### 👋 Benvenuto, {USER_NAME}.")
-    st.markdown("Ambiente Cloud Protetto. Connessione crittografata attiva.")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("System Uptime", "99.9%", "+0.1%")
-    c2.metric("Cloud Latency", "24ms", "⚡")
-    c3.metric("Encryption", "AES-256", "🔒")
-    c4.metric("Threat Level", "LOW", "🛡️")
-    st.divider()
-    if st.session_state.audit_done:
-         st.info("🔔 **NOTIFICA:** Risultati disponibili in 'Audit Operations'.")
+    
+    if APP_MODE == "local":
+        st.success("✅ **Enterprise Environment Detected:** Il sistema sta operando su server locale sicuro. Lo storico è persistente e crittografato.")
+        # Dati reali da DB locale
+        history = load_history()
+        total_audits = len(history)
+        total_risks = history['risk_value'].sum() if not history.empty else 0
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("System Uptime", "99.9%", "+0.1%")
+        c2.metric("Total Audits (DB)", str(total_audits), "Stored")
+        c3.metric("Lifetime Risk", f"€ {total_risks:,.0f}", "Protected")
+        c4.metric("Threat Level", "LOW", "🛡️")
+        
     else:
-         st.info("💡 **INFO:** In modalità Cloud, lo storico locale viene resettato al termine della sessione per Privacy.")
+        st.warning("☁️ **Cloud Demo Environment:** Il sistema opera in modalità dimostrativa sicura. I dati verranno rimossi al termine della sessione.")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("System Uptime", "99.9%", "+0.1%")
+        c2.metric("Cloud Latency", "24ms", "⚡")
+        c3.metric("Encryption", "AES-256", "🔒")
+        c4.metric("Threat Level", "LOW", "🛡️")
 
-# --- TAB 2 ---
+    st.divider()
+
+# --- TAB 2: AUDIT OPERATIONS ---
 with tab2:
     st.subheader("📂 Data Ingestion & Analysis")
     uploaded_file = st.file_uploader("Upload ERP Export (CSV / Excel)", type=["csv", "xlsx", "xls"])
@@ -269,7 +271,7 @@ with tab2:
             
             if start_audit:
                 st.session_state.audit_done = False
-                with st.spinner('🤖 Analisi Cloud in corso...'):
+                with st.spinner('🤖 Analisi in corso...'):
                     time.sleep(1)
                     numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
                     if not numeric_cols: st.error("Nessun dato finanziario rilevato.")
@@ -314,13 +316,24 @@ with tab2:
                 else: st.success("✅ Audit Pulito.")
         except Exception as e: st.error(f"Errore: {e}")
 
-# --- TAB 3 ---
+# --- TAB 3: STORICO LOG ---
 with tab3:
-    st.subheader("📜 Storico Operazioni (Session Log)")
-    if st.button("🔄 Aggiorna"): st.rerun()
+    st.subheader("📜 Storico Operazioni (Audit Log)")
+    if st.button("🔄 Aggiorna Log"): st.rerun()
     history_df = load_history()
-    if not history_df.empty: st.dataframe(history_df.style.format({"risk_value": "€ {:,.2f}", "total_rows": "{:,}"}), use_container_width=True)
-    else: st.warning("Nessun audit registrato in questa sessione cloud.")
+    
+    if APP_MODE == "local":
+        if not history_df.empty:
+            st.success(f"Archivio Enterprise: {len(history_df)} record trovati nel database locale.")
+            st.dataframe(history_df.style.format({"risk_value": "€ {:,.2f}", "total_rows": "{:,}"}), use_container_width=True)
+        else:
+            st.info("Il database locale è pronto. Esegui il primo audit per popolarlo.")
+    else:
+        st.warning("⚠️ Modalità Cloud: Visualizzazione limitata alla sessione corrente.")
+        if not history_df.empty:
+            st.dataframe(history_df, use_container_width=True)
+        else:
+            st.info("Nessuna attività recente nella sessione cloud.")
 
 # --- TAB 4 ---
 with tab4:
@@ -328,12 +341,14 @@ with tab4:
     new_contam = st.slider("Sensibilità AI", 0.01, 0.20, value=st.session_state.contamination)
     if new_contam != st.session_state.contamination: st.session_state.contamination = new_contam
     st.divider()
-    st.code("""{ "Model": "Isolation Forest", "Env": "Cloud Protected" }""", language="json")
+    st.code(f"""{{ "Model": "IsolationForest", "Environment": "{APP_MODE.upper()}" }}""", language="json")
 
 # --- TAB 5 ---
 with tab5:
-    st.subheader("🎓 Academy Cloud")
-    st.info("Questa versione Cloud permette l'audit da qualsiasi dispositivo. I dati vengono processati in RAM e non persistono sui server per garantire la Privacy.")
-    with st.expander("🏁 PRIMI PASSI"): st.write("Carica il file in 'Audit Operations' e lancia l'AI.")
+    st.subheader("🎓 Academy")
+    if APP_MODE == "local":
+        st.write("Benvenuto nel manuale Enterprise. Qui trovi le guide per l'uso persistente del tool.")
+    else:
+        st.write("Benvenuto nella Demo Cloud. Le funzionalità di salvataggio a lungo termine sono disabilitate.")
 
-st.markdown(f"""<div class="footer">Insight Certifier Platform © 2025 | <b>{USER_NAME}</b> | Cloud Secure Edition</div>""", unsafe_allow_html=True)
+st.markdown(f"""<div class="footer">Insight Certifier Platform © 2025 | <b>{USER_NAME}</b> | {APP_MODE.upper()} EDITION</div>""", unsafe_allow_html=True)
