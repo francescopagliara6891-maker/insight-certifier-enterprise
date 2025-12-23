@@ -233,7 +233,13 @@ with tab1:
         st.success("✅ **Enterprise Environment Detected:** Il sistema sta operando su server locale sicuro. Lo storico è persistente.")
         history = load_history()
         total_audits = len(history)
-        total_risks = history['risk_value'].sum() if not history.empty else 0
+        # --- FIX SICUREZZA PER CALCOLO SOMMA TAB 1 ---
+        total_risks = 0
+        if not history.empty:
+             history['risk_value'] = pd.to_numeric(history['risk_value'], errors='coerce').fillna(0.0)
+             total_risks = history['risk_value'].sum()
+        # ---------------------------------------------
+        
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("System Uptime", "99.9%", "+0.1%")
         c2.metric("Total Audits (DB)", str(total_audits), "Stored")
@@ -317,6 +323,13 @@ with tab3:
     if APP_MODE == "local":
         if not history_df.empty:
             st.success(f"Archivio Enterprise: {len(history_df)} record trovati nel database locale.")
+            
+            # --- FIX CRITICO PER FORMATTAZIONE NUMERI ---
+            # Questo blocco assicura che i dati siano numeri float e non bytes/object
+            history_df['risk_value'] = pd.to_numeric(history_df['risk_value'], errors='coerce').fillna(0.0)
+            history_df['total_rows'] = pd.to_numeric(history_df['total_rows'], errors='coerce').fillna(0)
+            # --------------------------------------------
+
             st.dataframe(history_df.style.format({"risk_value": "€ {:,.2f}", "total_rows": "{:,}"}), use_container_width=True)
         else: st.info("Il database locale è pronto.")
     else:
